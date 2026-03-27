@@ -1,0 +1,5 @@
+openclaw-local/.env
+openclaw-local/runtime/
+openclaw-local/state/
+openclaw-local/workspace/
+openclaw-local/logs/
