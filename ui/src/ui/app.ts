@@ -17,7 +17,11 @@ import {
 } from "./app-channels.ts";
 import {
   handleAbortChat as handleAbortChatInternal,
+  handleChatElevenLabsVoiceInput as handleChatElevenLabsVoiceInputInternal,
+  handleChatVoiceInput as handleChatVoiceInputInternal,
   handleSendChat as handleSendChatInternal,
+  refreshChatElevenLabsVoiceInput as refreshChatElevenLabsVoiceInputInternal,
+  refreshChatVoiceInput as refreshChatVoiceInputInternal,
   removeQueuedMessage as removeQueuedMessageInternal,
 } from "./app-chat.ts";
 import { DEFAULT_CRON_FORM, DEFAULT_LOG_LEVEL_FILTERS } from "./app-defaults.ts";
@@ -155,6 +159,10 @@ export class OpenClawApp extends LitElement {
   @state() chatLoading = false;
   @state() chatSending = false;
   @state() chatMessage = "";
+  @state() chatVoiceInputBusy = false;
+  @state() chatVoiceInputEnabled = false;
+  @state() chatElevenLabsVoiceInputBusy = false;
+  @state() chatElevenLabsVoiceInputEnabled = false;
   @state() chatMessages: unknown[] = [];
   @state() chatToolMessages: unknown[] = [];
   @state() chatStreamSegments: Array<{ text: string; ts: number }> = [];
@@ -618,6 +626,32 @@ export class OpenClawApp extends LitElement {
 
   async handleAbortChat() {
     await handleAbortChatInternal(this as unknown as Parameters<typeof handleAbortChatInternal>[0]);
+  }
+
+  async refreshChatVoiceInput() {
+    await refreshChatVoiceInputInternal(
+      this as unknown as Parameters<typeof refreshChatVoiceInputInternal>[0],
+    );
+  }
+
+  async refreshChatElevenLabsVoiceInput() {
+    await refreshChatElevenLabsVoiceInputInternal(
+      this as unknown as Parameters<typeof refreshChatElevenLabsVoiceInputInternal>[0],
+    );
+  }
+
+  async handleChatVoiceInput(params: { blob: Blob; mimeType: string }) {
+    await handleChatVoiceInputInternal(
+      this as unknown as Parameters<typeof handleChatVoiceInputInternal>[0],
+      params,
+    );
+  }
+
+  async handleChatElevenLabsVoiceInput(params: { blob: Blob; mimeType: string }) {
+    await handleChatElevenLabsVoiceInputInternal(
+      this as unknown as Parameters<typeof handleChatElevenLabsVoiceInputInternal>[0],
+      params,
+    );
   }
 
   removeQueuedMessage(id: string) {

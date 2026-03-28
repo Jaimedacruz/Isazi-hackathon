@@ -2,7 +2,12 @@ import {
   GATEWAY_EVENT_UPDATE_AVAILABLE,
   type GatewayUpdateAvailableEventPayload,
 } from "../../../src/gateway/events.js";
-import { CHAT_SESSIONS_ACTIVE_MINUTES, flushChatQueueForEvent } from "./app-chat.ts";
+import {
+  CHAT_SESSIONS_ACTIVE_MINUTES,
+  flushChatQueueForEvent,
+  refreshChatElevenLabsVoiceInput,
+  refreshChatVoiceInput,
+} from "./app-chat.ts";
 import type { EventLogEntry } from "./app-events.ts";
 import {
   applySettings,
@@ -79,6 +84,10 @@ type GatewayHost = {
   serverVersion: string | null;
   sessionKey: string;
   chatRunId: string | null;
+  chatVoiceInputBusy: boolean;
+  chatVoiceInputEnabled: boolean;
+  chatElevenLabsVoiceInputBusy: boolean;
+  chatElevenLabsVoiceInputEnabled: boolean;
   refreshSessionsAfterChat: Set<string>;
   execApprovalQueue: ExecApprovalRequest[];
   execApprovalError: string | null;
@@ -220,6 +229,8 @@ export function connectGateway(host: GatewayHost) {
       void loadHealthState(host as unknown as OpenClawApp);
       void loadNodes(host as unknown as OpenClawApp, { quiet: true });
       void loadDevices(host as unknown as OpenClawApp, { quiet: true });
+      void refreshChatElevenLabsVoiceInput(host);
+      void refreshChatVoiceInput(host);
       void refreshActiveTab(host as unknown as Parameters<typeof refreshActiveTab>[0]);
     },
     onClose: ({ code, reason, error }) => {
@@ -227,6 +238,10 @@ export function connectGateway(host: GatewayHost) {
         return;
       }
       host.connected = false;
+      host.chatElevenLabsVoiceInputEnabled = false;
+      host.chatElevenLabsVoiceInputBusy = false;
+      host.chatVoiceInputEnabled = false;
+      host.chatVoiceInputBusy = false;
       // Code 1012 = Service Restart (expected during config saves, don't show as error)
       host.lastErrorCode =
         resolveGatewayErrorDetailCode(error) ??

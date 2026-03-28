@@ -61,6 +61,10 @@ export type AppViewState = {
   chatLoading: boolean;
   chatSending: boolean;
   chatMessage: string;
+  chatVoiceInputBusy: boolean;
+  chatVoiceInputEnabled: boolean;
+  chatElevenLabsVoiceInputBusy: boolean;
+  chatElevenLabsVoiceInputEnabled: boolean;
   chatAttachments: ChatAttachment[];
   chatMessages: unknown[];
   chatToolMessages: unknown[];
@@ -367,6 +371,10 @@ export type AppViewState = {
     setChatMessage: (next: string) => void;
     handleSendChat: (messageOverride?: string, opts?: { restoreDraft?: boolean }) => Promise<void>;
     handleAbortChat: () => Promise<void>;
+    refreshChatElevenLabsVoiceInput: () => Promise<void>;
+    handleChatElevenLabsVoiceInput: (params: { blob: Blob; mimeType: string }) => Promise<void>;
+    refreshChatVoiceInput: () => Promise<void>;
+    handleChatVoiceInput: (params: { blob: Blob; mimeType: string }) => Promise<void>;
     removeQueuedMessage: (id: string) => void;
     handleChatScroll: (event: Event) => void;
     resetToolStream: () => void;

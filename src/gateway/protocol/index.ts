@@ -64,6 +64,12 @@ import {
   type ChatInjectParams,
   ChatInjectParamsSchema,
   ChatSendParamsSchema,
+  type ChatVoiceStatusResult,
+  ChatVoiceStatusResultSchema,
+  type ChatVoiceTranscribeParams,
+  ChatVoiceTranscribeParamsSchema,
+  type ChatVoiceTranscribeResult,
+  ChatVoiceTranscribeResultSchema,
   type ConfigApplyParams,
   ConfigApplyParamsSchema,
   type ConfigGetParams,
@@ -457,6 +463,15 @@ export const validateLogsTailParams = ajv.compile<LogsTailParams>(LogsTailParams
 export const validateChatHistoryParams = ajv.compile(ChatHistoryParamsSchema);
 export const validateChatSendParams = ajv.compile(ChatSendParamsSchema);
 export const validateChatAbortParams = ajv.compile<ChatAbortParams>(ChatAbortParamsSchema);
+export const validateChatVoiceStatusResult = ajv.compile<ChatVoiceStatusResult>(
+  ChatVoiceStatusResultSchema,
+);
+export const validateChatVoiceTranscribeParams = ajv.compile<ChatVoiceTranscribeParams>(
+  ChatVoiceTranscribeParamsSchema,
+);
+export const validateChatVoiceTranscribeResult = ajv.compile<ChatVoiceTranscribeResult>(
+  ChatVoiceTranscribeResultSchema,
+);
 export const validateChatInjectParams = ajv.compile<ChatInjectParams>(ChatInjectParamsSchema);
 export const validateChatEvent = ajv.compile(ChatEventSchema);
 export const validateUpdateRunParams = ajv.compile<UpdateRunParams>(UpdateRunParamsSchema);
@@ -602,6 +617,9 @@ export {
   LogsTailParamsSchema,
   LogsTailResultSchema,
   ChatHistoryParamsSchema,
+  ChatVoiceStatusResultSchema,
+  ChatVoiceTranscribeParamsSchema,
+  ChatVoiceTranscribeResultSchema,
   ChatSendParamsSchema,
   ChatInjectParamsSchema,
   UpdateRunParamsSchema,
@@ -722,5 +740,8 @@ export type {
   LogsTailResult,
   PollParams,
   UpdateRunParams,
+  ChatVoiceStatusResult,
+  ChatVoiceTranscribeParams,
+  ChatVoiceTranscribeResult,
   ChatInjectParams,
 };

@@ -7,16 +7,70 @@ const { setLastActiveSessionKeyMock } = vi.hoisted(() => ({
   setLastActiveSessionKeyMock: vi.fn(),
 }));
 
+const {
+  transcribeChatElevenLabsVoiceMock,
+  transcribeChatVoiceMock,
+  sendChatMessageMock,
+  resetToolStreamMock,
+  resetChatScrollMock,
+  scheduleChatScrollMock,
+} = vi.hoisted(() => ({
+  transcribeChatElevenLabsVoiceMock: vi.fn(),
+  transcribeChatVoiceMock: vi.fn(),
+  sendChatMessageMock: vi.fn(),
+  resetToolStreamMock: vi.fn(),
+  resetChatScrollMock: vi.fn(),
+  scheduleChatScrollMock: vi.fn(),
+}));
+
 vi.mock("./app-settings.ts", () => ({
   setLastActiveSessionKey: (...args: unknown[]) => setLastActiveSessionKeyMock(...args),
 }));
 
+vi.mock("./controllers/chat-voice.ts", () => ({
+  loadChatVoiceStatus: vi.fn(),
+  transcribeChatVoice: (...args: unknown[]) => transcribeChatVoiceMock(...args),
+}));
+
+vi.mock("./controllers/chat-elevenlabs-voice.ts", () => ({
+  loadChatElevenLabsVoiceStatus: vi.fn(),
+  transcribeChatElevenLabsVoice: (...args: unknown[]) => transcribeChatElevenLabsVoiceMock(...args),
+}));
+
+vi.mock("./controllers/chat.ts", async () => {
+  const actual = await vi.importActual<typeof import("./controllers/chat.ts")>("./controllers/chat.ts");
+  return {
+    ...actual,
+    sendChatMessage: (...args: unknown[]) => sendChatMessageMock(...args),
+  };
+});
+
+vi.mock("./app-tool-stream.ts", () => ({
+  resetToolStream: (...args: unknown[]) => resetToolStreamMock(...args),
+}));
+
+vi.mock("./app-scroll.ts", async () => {
+  const actual = await vi.importActual<typeof import("./app-scroll.ts")>("./app-scroll.ts");
+  return {
+    ...actual,
+    resetChatScroll: (...args: unknown[]) => resetChatScrollMock(...args),
+    scheduleChatScroll: (...args: unknown[]) => scheduleChatScrollMock(...args),
+  };
+});
+
 let handleSendChat: typeof import("./app-chat.ts").handleSendChat;
 let refreshChatAvatar: typeof import("./app-chat.ts").refreshChatAvatar;
+let handleChatElevenLabsVoiceInput: typeof import("./app-chat.ts").handleChatElevenLabsVoiceInput;
+let handleChatVoiceInput: typeof import("./app-chat.ts").handleChatVoiceInput;
 
 async function loadChatHelpers(): Promise<void> {
   vi.resetModules();
-  ({ handleSendChat, refreshChatAvatar } = await import("./app-chat.ts"));
+  ({
+    handleSendChat,
+    refreshChatAvatar,
+    handleChatElevenLabsVoiceInput,
+    handleChatVoiceInput,
+  } = await import("./app-chat.ts"));
 }
 
 function makeHost(overrides?: Partial<ChatHost>): ChatHost {
@@ -24,9 +78,13 @@ function makeHost(overrides?: Partial<ChatHost>): ChatHost {
     client: null,
     chatMessages: [],
     chatStream: null,
-    connected: true,
-    chatMessage: "",
-    chatAttachments: [],
+      connected: true,
+      chatMessage: "",
+      chatElevenLabsVoiceInputBusy: false,
+      chatElevenLabsVoiceInputEnabled: false,
+      chatVoiceInputBusy: false,
+      chatVoiceInputEnabled: false,
+      chatAttachments: [],
     chatQueue: [],
     chatRunId: null,
     chatSending: false,
@@ -91,6 +149,12 @@ describe("refreshChatAvatar", () => {
 describe("handleSendChat", () => {
   beforeEach(async () => {
     setLastActiveSessionKeyMock.mockReset();
+    transcribeChatElevenLabsVoiceMock.mockReset();
+    transcribeChatVoiceMock.mockReset();
+    sendChatMessageMock.mockReset();
+    resetToolStreamMock.mockReset();
+    resetChatScrollMock.mockReset();
+    scheduleChatScrollMock.mockReset();
     await loadChatHelpers();
   });
 
@@ -155,6 +219,46 @@ describe("handleSendChat", () => {
       value: "openai/gpt-5-mini",
     });
     expect(onSlashAction).toHaveBeenCalledWith("refresh-tools-effective");
+  });
+
+  it("transcribes voice input and sends the transcript immediately", async () => {
+    transcribeChatVoiceMock.mockResolvedValue("ship the patch");
+    sendChatMessageMock.mockResolvedValue("run-123");
+
+    const host = makeHost({
+      client: { request: vi.fn() } as unknown as ChatHost["client"],
+      chatMessage: "",
+    });
+
+    await handleChatVoiceInput(host, {
+      blob: new Blob(["voice"], { type: "audio/webm" }),
+      mimeType: "audio/webm",
+    });
+
+    expect(transcribeChatVoiceMock).toHaveBeenCalled();
+    expect(sendChatMessageMock).toHaveBeenCalled();
+    expect(host.chatVoiceInputBusy).toBe(false);
+    expect(host.chatMessage).toBe("ship the patch");
+  });
+
+  it("transcribes ElevenLabs voice input and sends the transcript immediately", async () => {
+    transcribeChatElevenLabsVoiceMock.mockResolvedValue("ship the elevenlabs patch");
+    sendChatMessageMock.mockResolvedValue("run-456");
+
+    const host = makeHost({
+      client: { request: vi.fn() } as unknown as ChatHost["client"],
+      chatMessage: "",
+    });
+
+    await handleChatElevenLabsVoiceInput(host, {
+      blob: new Blob(["voice"], { type: "audio/webm" }),
+      mimeType: "audio/webm",
+    });
+
+    expect(transcribeChatElevenLabsVoiceMock).toHaveBeenCalled();
+    expect(sendChatMessageMock).toHaveBeenCalled();
+    expect(host.chatElevenLabsVoiceInputBusy).toBe(false);
+    expect(host.chatMessage).toBe("ship the elevenlabs patch");
   });
 });
 

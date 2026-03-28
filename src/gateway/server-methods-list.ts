@@ -114,6 +114,10 @@ const BASE_METHODS = [
   "chat.history",
   "chat.abort",
   "chat.send",
+  "chat.voice.elevenlabs.status",
+  "chat.voice.elevenlabs.transcribe",
+  "chat.voice.status",
+  "chat.voice.transcribe",
 ];
 
 export function listGatewayMethods(): string[] {

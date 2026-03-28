@@ -5,6 +5,12 @@ import { resetToolStream } from "./app-tool-stream.ts";
 import type { OpenClawApp } from "./app.ts";
 import { executeSlashCommand } from "./chat/slash-command-executor.ts";
 import { parseSlashCommand } from "./chat/slash-commands.ts";
+import { formatConnectError } from "./connect-error.ts";
+import {
+  loadChatElevenLabsVoiceStatus,
+  transcribeChatElevenLabsVoice,
+} from "./controllers/chat-elevenlabs-voice.ts";
+import { loadChatVoiceStatus, transcribeChatVoice } from "./controllers/chat-voice.ts";
 import { abortChatRun, loadChatHistory, sendChatMessage } from "./controllers/chat.ts";
 import { loadModels } from "./controllers/models.ts";
 import { loadSessions } from "./controllers/sessions.ts";
@@ -20,6 +26,10 @@ export type ChatHost = {
   chatStream: string | null;
   connected: boolean;
   chatMessage: string;
+  chatVoiceInputBusy: boolean;
+  chatVoiceInputEnabled: boolean;
+  chatElevenLabsVoiceInputBusy: boolean;
+  chatElevenLabsVoiceInputEnabled: boolean;
   chatAttachments: ChatAttachment[];
   chatQueue: ChatQueueItem[];
   chatRunId: string | null;
@@ -80,6 +90,92 @@ export async function handleAbortChat(host: ChatHost) {
   }
   host.chatMessage = "";
   await abortChatRun(host as unknown as OpenClawApp);
+}
+
+export async function refreshChatVoiceInput(host: ChatHost) {
+  if (!host.client || !host.connected) {
+    host.chatVoiceInputEnabled = false;
+    return;
+  }
+  try {
+    const status = await loadChatVoiceStatus(host.client);
+    host.chatVoiceInputEnabled = status.enabled;
+  } catch {
+    host.chatVoiceInputEnabled = false;
+  }
+}
+
+export async function refreshChatElevenLabsVoiceInput(host: ChatHost) {
+  if (!host.client || !host.connected) {
+    host.chatElevenLabsVoiceInputEnabled = false;
+    return;
+  }
+  try {
+    const status = await loadChatElevenLabsVoiceStatus(host.client);
+    host.chatElevenLabsVoiceInputEnabled = status.enabled;
+  } catch {
+    host.chatElevenLabsVoiceInputEnabled = false;
+  }
+}
+
+export async function handleChatVoiceInput(
+  host: ChatHost,
+  params: { blob: Blob; mimeType: string },
+) {
+  if (!host.client || !host.connected) {
+    return;
+  }
+  host.chatVoiceInputBusy = true;
+  host.lastError = null;
+  try {
+    const transcript = (
+      await transcribeChatVoice({
+        client: host.client,
+        blob: params.blob,
+        mimeType: params.mimeType,
+      })
+    ).trim();
+    if (!transcript) {
+      return;
+    }
+    const separator = host.chatMessage && !host.chatMessage.endsWith(" ") ? " " : "";
+    host.chatMessage += `${separator}${transcript}`;
+    await handleSendChat(host, host.chatMessage);
+  } catch (err) {
+    host.lastError = formatConnectError(err);
+  } finally {
+    host.chatVoiceInputBusy = false;
+  }
+}
+
+export async function handleChatElevenLabsVoiceInput(
+  host: ChatHost,
+  params: { blob: Blob; mimeType: string },
+) {
+  if (!host.client || !host.connected) {
+    return;
+  }
+  host.chatElevenLabsVoiceInputBusy = true;
+  host.lastError = null;
+  try {
+    const transcript = (
+      await transcribeChatElevenLabsVoice({
+        client: host.client,
+        blob: params.blob,
+        mimeType: params.mimeType,
+      })
+    ).trim();
+    if (!transcript) {
+      return;
+    }
+    const separator = host.chatMessage && !host.chatMessage.endsWith(" ") ? " " : "";
+    host.chatMessage += `${separator}${transcript}`;
+    await handleSendChat(host, host.chatMessage);
+  } catch (err) {
+    host.lastError = formatConnectError(err);
+  } finally {
+    host.chatElevenLabsVoiceInputBusy = false;
+  }
 }
 
 function enqueueChatMessage(

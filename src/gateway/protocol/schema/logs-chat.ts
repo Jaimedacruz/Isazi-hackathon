@@ -54,6 +54,31 @@ export const ChatAbortParamsSchema = Type.Object(
   { additionalProperties: false },
 );
 
+export const ChatVoiceStatusResultSchema = Type.Object(
+  {
+    enabled: Type.Boolean(),
+    acceptedMimeTypes: Type.Array(NonEmptyString),
+    maxBytes: Type.Integer({ minimum: 1 }),
+  },
+  { additionalProperties: false },
+);
+
+export const ChatVoiceTranscribeParamsSchema = Type.Object(
+  {
+    mimeType: NonEmptyString,
+    audioBase64: NonEmptyString,
+    fileName: Type.Optional(Type.String({ maxLength: 255 })),
+  },
+  { additionalProperties: false },
+);
+
+export const ChatVoiceTranscribeResultSchema = Type.Object(
+  {
+    text: NonEmptyString,
+  },
+  { additionalProperties: false },
+);
+
 export const ChatInjectParamsSchema = Type.Object(
   {
     sessionKey: NonEmptyString,

@@ -12,11 +12,27 @@ function relativeSymlinkTarget(sourcePath, targetPath) {
   return relativeTarget || ".";
 }
 
-function ensureSymlink(targetValue, targetPath, type) {
+function copyPathFallback(sourcePath, targetPath) {
+  fs.mkdirSync(path.dirname(targetPath), { recursive: true });
+  fs.cpSync(sourcePath, targetPath, { recursive: true, force: true });
+}
+
+function shouldCopyInsteadOfSymlink(error, sourcePath) {
+  return Boolean(
+    sourcePath &&
+      (error?.code === "EPERM" || error?.code === "EACCES" || error?.code === "UNKNOWN"),
+  );
+}
+
+function ensureSymlink(targetValue, targetPath, type, sourcePath) {
   try {
     fs.symlinkSync(targetValue, targetPath, type);
     return;
   } catch (error) {
+    if (shouldCopyInsteadOfSymlink(error, sourcePath)) {
+      copyPathFallback(sourcePath, targetPath);
+      return;
+    }
     if (error?.code !== "EEXIST") {
       throw error;
     }
@@ -31,11 +47,19 @@ function ensureSymlink(targetValue, targetPath, type) {
   }
 
   removePathIfExists(targetPath);
-  fs.symlinkSync(targetValue, targetPath, type);
+  try {
+    fs.symlinkSync(targetValue, targetPath, type);
+  } catch (error) {
+    if (shouldCopyInsteadOfSymlink(error, sourcePath)) {
+      copyPathFallback(sourcePath, targetPath);
+      return;
+    }
+    throw error;
+  }
 }
 
 function symlinkPath(sourcePath, targetPath, type) {
-  ensureSymlink(relativeSymlinkTarget(sourcePath, targetPath), targetPath, type);
+  ensureSymlink(relativeSymlinkTarget(sourcePath, targetPath), targetPath, type, sourcePath);
 }
 
 function shouldWrapRuntimeJsFile(sourcePath) {
@@ -85,7 +109,7 @@ function stagePluginRuntimeOverlay(sourceDir, targetDir) {
     }
 
     if (dirent.isSymbolicLink()) {
-      ensureSymlink(fs.readlinkSync(sourcePath), targetPath);
+      ensureSymlink(fs.readlinkSync(sourcePath), targetPath, undefined, sourcePath);
       continue;
     }
 
@@ -113,7 +137,12 @@ function linkPluginNodeModules(params) {
   if (!fs.existsSync(params.sourcePluginNodeModulesDir)) {
     return;
   }
-  ensureSymlink(params.sourcePluginNodeModulesDir, runtimeNodeModulesDir, symlinkType());
+  ensureSymlink(
+    params.sourcePluginNodeModulesDir,
+    runtimeNodeModulesDir,
+    symlinkType(),
+    params.sourcePluginNodeModulesDir,
+  );
 }
 
 export function stageBundledPluginRuntime(params = {}) {

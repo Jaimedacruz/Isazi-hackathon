@@ -3,3 +3,43 @@
 @import "./chat/grouped.css";
 @import "./chat/tool-cards.css";
 @import "./chat/sidebar.css";
+
+.agent-chat__voice-status,
+.agent-chat__voice-error {
+  margin: 0 0 0.35rem;
+  font-size: 0.82rem;
+}
+
+.agent-chat__voice-status {
+  color: var(--text-muted);
+}
+
+.agent-chat__voice-error {
+  color: var(--danger);
+}
+
+.agent-chat__input-btn--voice {
+  color: var(--danger);
+}
+
+.agent-chat__input-btn--voice:hover:not(:disabled) {
+  color: var(--danger);
+}
+
+.agent-chat__input-btn--recording {
+  color: var(--danger);
+}
+
+.chat-send-btn--voice {
+  color: var(--danger);
+}
+
+.chat-send-btn--voice:hover:not(:disabled) {
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 10%, transparent);
+}
+
+.chat-send-btn--voice-recording {
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 14%, transparent);
+}
