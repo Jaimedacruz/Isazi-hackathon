@@ -26,11 +26,6 @@ import {
   type SlashCommandDef,
 } from "../chat/slash-commands.ts";
 import {
-  isElevenLabsVoiceRecordingSupported,
-  startElevenLabsVoiceRecording,
-  type ActiveElevenLabsVoiceRecording,
-} from "../chat/elevenlabs-voice-input.ts";
-import {
   formatVoiceRecordingError,
   isVoiceRecordingSupported,
   startVoiceRecording,
@@ -102,12 +97,9 @@ export type ChatProps = {
   onDraftChange: (next: string) => void;
   onRequestUpdate?: () => void;
   onSend: () => void;
-  onElevenLabsVoiceInput: (params: { blob: Blob; mimeType: string }) => Promise<void> | void;
   onVoiceInput: (params: { blob: Blob; mimeType: string }) => Promise<void> | void;
   onAbort?: () => void;
   onQueueRemove: (id: string) => void;
-  elevenLabsVoiceInputBusy: boolean;
-  elevenLabsVoiceInputEnabled: boolean;
   voiceInputBusy: boolean;
   voiceInputEnabled: boolean;
   onNewSession: () => void;
@@ -156,11 +148,8 @@ function getDeletedMessages(sessionKey: string): DeletedMessages {
 }
 
 interface ChatEphemeralState {
-  elevenLabsVoiceError: string | null;
-  elevenLabsVoiceRecording: boolean;
   voiceError: string | null;
   voiceRecording: boolean;
-  voiceAutoStartBlocked: boolean;
   slashMenuOpen: boolean;
   slashMenuItems: SlashCommandDef[];
   slashMenuIndex: number;
@@ -174,11 +163,8 @@ interface ChatEphemeralState {
 
 function createChatEphemeralState(): ChatEphemeralState {
   return {
-    elevenLabsVoiceError: null,
-    elevenLabsVoiceRecording: false,
     voiceError: null,
     voiceRecording: false,
-    voiceAutoStartBlocked: false,
     slashMenuOpen: false,
     slashMenuItems: [],
     slashMenuIndex: 0,
@@ -192,26 +178,17 @@ function createChatEphemeralState(): ChatEphemeralState {
 }
 
 const vs = createChatEphemeralState();
-let activeElevenLabsVoiceRecording: ActiveElevenLabsVoiceRecording | null = null;
 let activeVoiceRecording: ActiveVoiceRecording | null = null;
-let voiceAutoStartInFlight = false;
-let voiceAutoStartWaitingForInteraction = false;
 
 /**
  * Reset chat view ephemeral state when navigating away.
  * Stops voice recording and clears search/slash UI that should not survive navigation.
  */
 export function resetChatViewState() {
-  if (activeElevenLabsVoiceRecording) {
-    activeElevenLabsVoiceRecording.cancel();
-    activeElevenLabsVoiceRecording = null;
-  }
   if (activeVoiceRecording) {
     activeVoiceRecording.cancel();
     activeVoiceRecording = null;
   }
-  voiceAutoStartInFlight = false;
-  voiceAutoStartWaitingForInteraction = false;
   Object.assign(vs, createChatEphemeralState());
 }
 
@@ -648,73 +625,20 @@ function tokenEstimate(draft: string): string | null {
   return `~${Math.ceil(draft.length / 4)} tokens`;
 }
 
-function canAttemptVoiceAutoStart(props: ChatProps, isBusy: boolean): boolean {
-  return (
-    props.voiceInputEnabled &&
-    isVoiceRecordingSupported() &&
-    props.connected &&
-    !props.voiceInputBusy &&
-    !isBusy &&
-    !vs.voiceRecording &&
-    !activeVoiceRecording &&
-    !vs.voiceAutoStartBlocked
-  );
-}
-
-function hasVoiceAutoStartActivation(): boolean {
-  if (typeof navigator === "undefined" || !("userActivation" in navigator)) {
-    return true;
-  }
-  return navigator.userActivation.hasBeenActive;
-}
-
-function shouldAutoStartVoice(props: ChatProps, isBusy: boolean): boolean {
-  return canAttemptVoiceAutoStart(props, isBusy) && hasVoiceAutoStartActivation();
-}
-
-function shouldArmVoiceAutoStartOnInteraction(props: ChatProps, isBusy: boolean): boolean {
-  return canAttemptVoiceAutoStart(props, isBusy) && !hasVoiceAutoStartActivation();
-}
-
-function armVoiceAutoStartOnInteraction(requestUpdate: () => void): void {
-  if (voiceAutoStartWaitingForInteraction || typeof window === "undefined") {
-    return;
-  }
-  voiceAutoStartWaitingForInteraction = true;
-  const release = () => {
-    voiceAutoStartWaitingForInteraction = false;
-    window.removeEventListener("pointerdown", handleUserActivation, true);
-    window.removeEventListener("keydown", handleUserActivation, true);
-    window.removeEventListener("touchstart", handleUserActivation, true);
-  };
-  const handleUserActivation = () => {
-    release();
-    queueMicrotask(() => {
-      requestUpdate();
-    });
-  };
-  window.addEventListener("pointerdown", handleUserActivation, true);
-  window.addEventListener("keydown", handleUserActivation, true);
-  window.addEventListener("touchstart", handleUserActivation, true);
-}
-
 async function beginVoiceRecording(
-  props: ChatProps,
+  _props: ChatProps,
   requestUpdate: () => void,
-  opts?: { auto?: boolean },
 ): Promise<boolean> {
   vs.voiceError = null;
   try {
     activeVoiceRecording = await startVoiceRecording();
     vs.voiceRecording = true;
-    vs.voiceAutoStartBlocked = false;
     requestUpdate();
     return true;
   } catch (err) {
     activeVoiceRecording = null;
     vs.voiceRecording = false;
-    vs.voiceAutoStartBlocked = Boolean(opts?.auto);
-    vs.voiceError = await formatVoiceRecordingError(err, opts);
+    vs.voiceError = await formatVoiceRecordingError(err);
     requestUpdate();
     return false;
   }
@@ -740,46 +664,6 @@ async function stopVoiceRecordingAndSubmit(
     activeVoiceRecording = null;
     vs.voiceRecording = false;
     vs.voiceError = await formatVoiceRecordingError(err);
-    requestUpdate();
-  }
-}
-
-async function beginElevenLabsVoiceRecording(requestUpdate: () => void): Promise<boolean> {
-  vs.elevenLabsVoiceError = null;
-  try {
-    activeElevenLabsVoiceRecording = await startElevenLabsVoiceRecording();
-    vs.elevenLabsVoiceRecording = true;
-    requestUpdate();
-    return true;
-  } catch (err) {
-    activeElevenLabsVoiceRecording = null;
-    vs.elevenLabsVoiceRecording = false;
-    vs.elevenLabsVoiceError = await formatVoiceRecordingError(err);
-    requestUpdate();
-    return false;
-  }
-}
-
-async function stopElevenLabsVoiceRecordingAndSubmit(
-  props: ChatProps,
-  requestUpdate: () => void,
-): Promise<void> {
-  vs.elevenLabsVoiceError = null;
-  if (!activeElevenLabsVoiceRecording) {
-    vs.elevenLabsVoiceRecording = false;
-    requestUpdate();
-    return;
-  }
-  try {
-    const recorded = await activeElevenLabsVoiceRecording.stop();
-    activeElevenLabsVoiceRecording = null;
-    vs.elevenLabsVoiceRecording = false;
-    requestUpdate();
-    await props.onElevenLabsVoiceInput(recorded);
-  } catch (err) {
-    activeElevenLabsVoiceRecording = null;
-    vs.elevenLabsVoiceRecording = false;
-    vs.elevenLabsVoiceError = await formatVoiceRecordingError(err);
     requestUpdate();
   }
 }
@@ -1053,7 +937,6 @@ function renderSlashMenu(
 
 export function renderChat(props: ChatProps) {
   const canCompose = props.connected;
-  const isElevenLabsVoiceBusy = props.elevenLabsVoiceInputBusy;
   const isBusy = props.sending || props.stream !== null;
   const isVoiceBusy = props.voiceInputBusy;
   const canAbort = Boolean(props.canAbort && props.onAbort);
@@ -1084,24 +967,6 @@ export function renderChat(props: ChatProps) {
 
   const requestUpdate = props.onRequestUpdate ?? (() => {});
   const getDraft = props.getDraft ?? (() => props.draft);
-
-  if (shouldArmVoiceAutoStartOnInteraction(props, isBusy)) {
-    armVoiceAutoStartOnInteraction(requestUpdate);
-  }
-
-  if (shouldAutoStartVoice(props, isBusy) && !voiceAutoStartInFlight) {
-    voiceAutoStartInFlight = true;
-    queueMicrotask(async () => {
-      try {
-        if (!shouldAutoStartVoice(props, isBusy)) {
-          return;
-        }
-        await beginVoiceRecording(props, requestUpdate, { auto: true });
-      } finally {
-        voiceAutoStartInFlight = false;
-      }
-    });
-  }
 
   const splitRatio = props.splitRatio ?? 0.6;
   const sidebarOpen = Boolean(props.sidebarOpen && props.onCloseSidebar);
@@ -1449,15 +1314,6 @@ export function renderChat(props: ChatProps) {
           @change=${(e: Event) => handleFileSelect(e, props)}
         />
 
-        ${vs.elevenLabsVoiceRecording
-          ? html`<div class="agent-chat__voice-status">ElevenLabs mic recording...</div>`
-          : nothing}
-        ${isElevenLabsVoiceBusy
-          ? html`<div class="agent-chat__voice-status">ElevenLabs transcribing...</div>`
-          : nothing}
-        ${vs.elevenLabsVoiceError
-          ? html`<div class="agent-chat__voice-error">${vs.elevenLabsVoiceError}</div>`
-          : nothing}
         ${vs.voiceRecording
           ? html`<div class="agent-chat__voice-status">Recording...</div>`
           : nothing}
@@ -1476,11 +1332,7 @@ export function renderChat(props: ChatProps) {
           @keydown=${handleKeyDown}
           @input=${handleInput}
           @paste=${(e: ClipboardEvent) => handlePaste(e, props)}
-          placeholder=${vs.elevenLabsVoiceRecording
-            ? "ElevenLabs mic recording..."
-            : isElevenLabsVoiceBusy
-              ? "ElevenLabs transcribing..."
-              : vs.voiceRecording
+          placeholder=${vs.voiceRecording
             ? "Recording..."
             : isVoiceBusy
               ? "Transcribing..."
@@ -1513,19 +1365,12 @@ export function renderChat(props: ChatProps) {
                         await stopVoiceRecordingAndSubmit(props, requestUpdate);
                         return;
                       }
-                      vs.voiceAutoStartBlocked = false;
                       await beginVoiceRecording(props, requestUpdate);
                     }}
-                    title=${vs.voiceRecording
-                      ? "Stop recording and send"
-                      : vs.voiceAutoStartBlocked
-                        ? "Retry microphone"
-                        : "Microphone standby"}
+                    title=${vs.voiceRecording ? "Stop recording and send" : "Start recording"}
                     aria-label=${vs.voiceRecording
                       ? "Stop recording and send"
-                      : vs.voiceAutoStartBlocked
-                        ? "Retry microphone"
-                        : "Microphone standby"}
+                      : "Start recording"}
                     ?disabled=${!props.connected || isVoiceBusy}
                   >
                     ${vs.voiceRecording ? icons.micOff : icons.mic}
@@ -1571,31 +1416,6 @@ export function renderChat(props: ChatProps) {
                   </button>
                 `
               : html`
-                  ${props.elevenLabsVoiceInputEnabled && isElevenLabsVoiceRecordingSupported()
-                    ? html`
-                        <button
-                          class="chat-send-btn ${vs.elevenLabsVoiceRecording
-                            ? "chat-send-btn--voice-recording"
-                            : "chat-send-btn--voice"}"
-                          @click=${async () => {
-                            if (vs.elevenLabsVoiceRecording) {
-                              await stopElevenLabsVoiceRecordingAndSubmit(props, requestUpdate);
-                              return;
-                            }
-                            await beginElevenLabsVoiceRecording(requestUpdate);
-                          }}
-                          ?disabled=${!props.connected || isElevenLabsVoiceBusy || props.sending}
-                          title=${vs.elevenLabsVoiceRecording
-                            ? "Stop ElevenLabs recording and send"
-                            : "Record with ElevenLabs"}
-                          aria-label=${vs.elevenLabsVoiceRecording
-                            ? "Stop ElevenLabs recording and send"
-                            : "Record with ElevenLabs"}
-                        >
-                          ${vs.elevenLabsVoiceRecording ? icons.micOff : icons.mic}
-                        </button>
-                      `
-                    : nothing}
                   <button
                     class="chat-send-btn"
                     @click=${() => {
